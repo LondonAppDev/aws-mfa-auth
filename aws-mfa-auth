@@ -1,0 +1,148 @@
+#!/usr/bin/env python
+import sys
+import subprocess
+import json
+import os
+import configparser
+import argparse
+import dateutil.parser
+import errno
+import datetime
+import pytz
+
+
+aws_mfa_auth_dir_path = '{0}{1}'.format(
+    os.path.expanduser('~'), '/.aws-mfa-auth')
+aws_mfa_auth_conf_path = '{0}{1}'.format(
+    aws_mfa_auth_dir_path,
+    '/config')
+aws_credentials_path = '{0}{1}'.format(
+    os.path.expanduser('~'),
+    '/.aws/credentials')
+mfa_arn_option = 'mfa_arn'
+
+
+def main():
+    """Entrypoint to app."""
+    args = parse_args()
+
+    if not args.token:
+        if get_existing_mfa_auth(aws_mfa_auth_conf_path):
+            return
+
+    if args.mfa_arn:
+        aws_conf = set_mfa_arn(
+            aws_credentials_path, args.profile, args.mfa_arn)
+    else:
+        aws_conf = load_aws_config(aws_credentials_path)
+
+    try:
+        mfa_arn = aws_conf.get(args.profile, mfa_arn_option)
+    except configparser.NoSectionError:
+        print(
+            'Cannot find "{0}" section in {1}. Is AWS configured? '
+            '(run "aws configure")'.format(args.profile, aws_credentials_path)
+        )
+        return
+    except configparser.NoOptionError:
+        print(
+            'Cannot find "{0}" option in aws config.'
+        )
+        return
+
+    _ensure_dir_exists(aws_mfa_auth_dir_path)
+    aws_auth(mfa_arn, args.token, args.profile, aws_mfa_auth_conf_path)
+    get_existing_mfa_auth(aws_mfa_auth_conf_path)
+
+
+
+def _ensure_dir_exists(path):
+    """Ensure that the directory at given path exists."""
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
+
+def set_mfa_arn(config_path, profile, arn):
+    """Set the ARN for MFA device on given profile."""
+    config = load_aws_config(config_path)
+    config.set(profile, mfa_arn_option, arn)
+    with open(config_path, 'w') as configfile:
+        config.write(configfile)
+        print("MFA Device Token Set.")
+
+    return config
+
+
+def load_aws_config(path):
+    """Loads the AWS Config."""
+    config = configparser.ConfigParser()
+    config.read(path)
+
+    return config
+
+
+def aws_auth(arn, token, profile, path):
+    """Start AWS Auth."""
+
+    out = subprocess.check_output([
+        'aws', 'sts', 'get-session-token',
+        '--serial-number', arn,
+        '--token-code', token,
+        '--profile', profile
+    ])
+
+    response = json.loads(out)
+    creds = response.get('Credentials')
+    aws_access_key_id = creds.get('AccessKeyId')
+    aws_secret_access_key = creds.get('SecretAccessKey')
+    aws_session_token = creds.get('SessionToken')
+
+    with open(path, 'w') as outfile:
+        outfile.write(json.dumps(creds))
+
+
+def get_existing_mfa_auth(conf_path):
+    """Get the existing MFA auth if valid."""
+    try:
+        with open(conf_path, 'r') as config:
+            json_dict = json.load(config)
+            exp = json_dict.get('Expiration')
+            exp_date = dateutil.parser.parse(exp)
+            if exp_date > datetime.datetime.now(pytz.UTC):
+                print("export AWS_ACCESS_KEY_ID='{}'".format(
+                    json_dict.get('AccessKeyId')))
+                print("export AWS_SECRET_ACCESS_KEY='{}'".format(
+                    json_dict.get('SecretAccessKey')))
+                print("export AWS_SECURITY_TOKEN='{}'".format(
+                    json_dict.get('SessionToken')))
+                return True
+    except FileNotFoundError:
+        pass
+
+    return False
+
+
+def parse_args():
+    """Parse the provided arguments and return argument parser."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--profile', help='Name of AWS Profile', default='default')
+    parser.add_argument(
+        '--mfa_arn',
+        help='Provide if you wish to set the MFA arn for given profile.',
+        default=None
+    )
+    parser.add_argument(
+        '--token',
+        help='Token from the MFA device.',
+        default=None
+    )
+
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    main()
