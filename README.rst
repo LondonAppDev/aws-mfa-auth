@@ -28,7 +28,7 @@ Before using this script, you must configure the tool with the ARN of the MFA de
 
 Once configured, provide the token the first time you run the script:
 
-..code-block:: none
+.. code-block:: none
 
     aws-mfa-auth --token <MFA_DEVICE_TOKEN>
 
