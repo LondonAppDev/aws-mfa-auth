@@ -16,7 +16,7 @@ def readme():
 
 setup(
     name='aws-mfa-auth',
-    version='0.0.3',
+    version='0.0.4',
     description='Easy AWS MFA Authentication',
     author='Mark Winterbottom',
     author_email='mark@londonappdeveloper.com',
