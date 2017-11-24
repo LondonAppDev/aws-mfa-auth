@@ -11,6 +11,10 @@ This tool requires:
  * Python3.6 or higher
  * aws-cli (installed and configured)
 
+### Installation
+
+Install using `pip install aws-mfa-auth`.
+
 ### Configuration
 
 Before using this script, you must configure the tool with the ARN of the MFA device for the AWS profile you wish to authenticate with.

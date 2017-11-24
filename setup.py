@@ -8,4 +8,5 @@ setup(
     author='Mark Winterbottom',
     author_email='mark@londonappdeveloper.com',
     scripts=['aws-mfa-auth'],
+    install_requires=['awscli'],
 )
