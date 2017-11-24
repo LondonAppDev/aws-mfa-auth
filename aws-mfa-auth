@@ -1,147 +1,164 @@
 #!/usr/bin/env python
-import sys
+import argparse
+import configparser
+import os
+import logging
 import subprocess
 import json
-import os
-import configparser
-import argparse
 import dateutil.parser
-import errno
 import datetime
 import pytz
 
 
-aws_mfa_auth_dir_path = '{0}{1}'.format(
-    os.path.expanduser('~'), '/.aws-mfa-auth')
-aws_mfa_auth_conf_path = '{0}{1}'.format(
-    aws_mfa_auth_dir_path,
-    '/config')
-aws_credentials_path = '{0}{1}'.format(
-    os.path.expanduser('~'),
-    '/.aws/credentials')
-mfa_arn_option = 'mfa_arn'
+CONFIG_DIR = os.path.join(os.path.expanduser('~'), '.aws-mfa-auth')
+CONFIG_FILE = os.path.join(CONFIG_DIR, 'config.cnf')
+SESSION_FILE = os.path.join(CONFIG_DIR, 'session.json')
+MFA_ARN_OPTION = 'mfa_device_arn'
 
 
-def main():
-    """Entrypoint to app."""
-    args = parse_args()
-
-    if not args.token:
-        if get_existing_mfa_auth(aws_mfa_auth_conf_path):
-            return
-
-    if args.mfa_arn:
-        aws_conf = set_mfa_arn(
-            aws_credentials_path, args.profile, args.mfa_arn)
-    else:
-        aws_conf = load_aws_config(aws_credentials_path)
-
-    try:
-        mfa_arn = aws_conf.get(args.profile, mfa_arn_option)
-    except configparser.NoSectionError:
-        print(
-            'Cannot find "{0}" section in {1}. Is AWS configured? '
-            '(run "aws configure")'.format(args.profile, aws_credentials_path)
-        )
-        return
-    except configparser.NoOptionError:
-        print(
-            'Cannot find "{0}" option in aws config.'
-        )
-        return
-
-    _ensure_dir_exists(aws_mfa_auth_dir_path)
-    aws_auth(mfa_arn, args.token, args.profile, aws_mfa_auth_conf_path)
-    get_existing_mfa_auth(aws_mfa_auth_conf_path)
-
-
-
-def _ensure_dir_exists(path):
-    """Ensure that the directory at given path exists."""
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
-
-
-def set_mfa_arn(config_path, profile, arn):
-    """Set the ARN for MFA device on given profile."""
-    config = load_aws_config(config_path)
-    config.set(profile, mfa_arn_option, arn)
-    with open(config_path, 'w') as configfile:
-        config.write(configfile)
-        print("MFA Device Token Set.")
-
-    return config
-
-
-def load_aws_config(path):
-    """Loads the AWS Config."""
-    config = configparser.ConfigParser()
-    config.read(path)
-
-    return config
-
-
-def aws_auth(arn, token, profile, path):
-    """Start AWS Auth."""
-
-    out = subprocess.check_output([
-        'aws', 'sts', 'get-session-token',
-        '--serial-number', arn,
-        '--token-code', token,
-        '--profile', profile
-    ])
-
-    response = json.loads(out)
-    creds = response.get('Credentials')
-    aws_access_key_id = creds.get('AccessKeyId')
-    aws_secret_access_key = creds.get('SecretAccessKey')
-    aws_session_token = creds.get('SessionToken')
-
-    with open(path, 'w') as outfile:
-        outfile.write(json.dumps(creds))
-
-
-def get_existing_mfa_auth(conf_path):
-    """Get the existing MFA auth if valid."""
-    try:
-        with open(conf_path, 'r') as config:
-            json_dict = json.load(config)
-            exp = json_dict.get('Expiration')
-            exp_date = dateutil.parser.parse(exp)
-            if exp_date > datetime.datetime.now(pytz.UTC):
-                print("export AWS_ACCESS_KEY_ID='{}'".format(
-                    json_dict.get('AccessKeyId')))
-                print("export AWS_SECRET_ACCESS_KEY='{}'".format(
-                    json_dict.get('SecretAccessKey')))
-                print("export AWS_SECURITY_TOKEN='{}'".format(
-                    json_dict.get('SessionToken')))
-                return True
-    except FileNotFoundError:
-        pass
-
-    return False
-
-
-def parse_args():
-    """Parse the provided arguments and return argument parser."""
+def _args():
+    """ Parse arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--profile', help='Name of AWS Profile', default='default')
+        '--configure',
+        help='Configure the tool.',
+        default=False,
+        action='store_true',
+    )
     parser.add_argument(
-        '--mfa_arn',
-        help='Provide if you wish to set the MFA arn for given profile.',
-        default=None
+        '--profile',
+        help='Name of AWS profile to authenticate against.',
+        default=os.environ.get('AWS_PROFILE', 'default'),
     )
     parser.add_argument(
         '--token',
-        help='Token from the MFA device.',
-        default=None
+        help='AWS MFA Auth Token',
     )
 
     return parser.parse_args()
+
+
+def _update_config(args, conf_path):
+    """ Update the config."""
+    pass
+
+
+def _get_conf(path, section, option):
+    """ Retrieve a specific config option from a file."""
+    config = configparser.ConfigParser()
+    config.read(path)
+    try:
+        mfa_arn = config.get(section, option)
+    except configparser.NoSectionError:
+        return None
+    except configparser.NoOptionError:
+        return None
+
+    return mfa_arn
+
+
+def _set_conf(path, section, option, value):
+    """ Set a specific config item."""
+    config = configparser.ConfigParser()
+    config.read(path)
+
+    if section not in config:
+        logging.info('Section [{}] does not exist. Adding it.'.format(section))
+        config.add_section(section)
+
+    config.set(section, option, value)
+
+    with open(path, 'w') as config_file:
+        config.write(config_file)
+
+
+def _configure(args):
+    """ Configure."""
+    profile = input(
+        'Profile to Configure ({}): '.format(
+            args.profile
+        )
+    ) or args.profile
+
+    current_mfa_arn = _get_conf(
+        CONFIG_FILE, profile, MFA_ARN_OPTION)
+    mfa_arn = input(
+        'MFA Device ARN ({}): '.format(current_mfa_arn)) or current_mfa_arn
+
+    if not mfa_arn:
+        print('Please provide a valid ARN for your MFA device.')
+        return
+
+    _set_conf(CONFIG_FILE, profile, MFA_ARN_OPTION, mfa_arn)
+
+    print('Configuration updated.')
+
+
+def _set_auth_envs(session):
+    """ Print credentials."""
+    key_id = session.get('AccessKeyId')
+    secret = session.get('SecretAccessKey')
+    token = session.get('SessionToken')
+
+    print(
+        'export AWS_ACCESS_KEY_ID={key_id} && '
+        'export AWS_SECRET_ACCESS_KEY={secret} &&'
+        'export AWS_SECURITY_TOKEN={token}'.format(
+            key_id=key_id,
+            secret=secret,
+            token=token,
+        )
+    )
+
+
+def _handle_mfa_auth(args):
+    """ Handle MFA auth."""
+    mfa_arn = _get_conf(CONFIG_FILE, args.profile, MFA_ARN_OPTION)
+    session = None
+
+    if args.token:
+        try:
+            out = subprocess.check_output([
+                'aws', 'sts', 'get-session-token',
+                '--serial-number', mfa_arn,
+                '--token-code', args.token,
+                '--profile', args.profile
+            ])
+        except subprocess.CalledProcessError:
+            logging.exception('Unable to authenticate.')
+            return
+
+        response = json.loads(out)
+        session = response.get('Credentials')
+        with open(SESSION_FILE, 'w') as session_file:
+            json.dump(session, session_file)
+
+    if session:
+        _set_auth_envs(session)
+        return
+
+    try:
+        with open(SESSION_FILE, 'r') as session_file:
+            session = json.load(session_file)
+            session_exp = session.get('Expiration')
+            exp_date = dateutil.parser.parse(session_exp)
+            if exp_date > datetime.datetime.now(pytz.UTC):
+                _set_auth_envs(session)
+                return
+    except FileNotFoundError:
+        pass
+
+
+    print('Session expired, run again with --token argument.')
+
+
+def main():
+    """ Script entrypoint."""
+    args = _args()
+    if args.configure:
+        _configure(args)
+        return
+    _handle_mfa_auth(args)
 
 
 if __name__ == '__main__':

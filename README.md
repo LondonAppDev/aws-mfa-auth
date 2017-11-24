@@ -1,43 +1,26 @@
-# aws-mfa
+# AWS MFA Authenticator
 
-AWS CLI multi-factor authentication switcher.
-
-This script can be use to easily switch the default AWS CLI credentials to the temporarily authorized MFA session.
+AWS MFA Authenticator tool to make using the AWS CLI with MFA easier.
 
 ## Usage
 
-### Initial Setup
+### Dependencies
 
-First you need to set the **mfa arn** from your user in your aws-cli `credentials` settings file.
+This tool requires:
 
- 1. Edit `~/.aws/credentials` and add the following:
+ * Python3.6 or higher
+ * aws-cli (installed and configured)
 
- ```
-[account_name]
-aws_access_key_id = <insert_access_key>
-aws_secret_access_key = <insert secret access key>
-mfa_arn = <insert the ARN for your MFA device>
- ```
- 2. Save the file.
+### Configuration
 
-### Authentication
+Before using this script, you must configure the tool with the ARN of the MFA device for the AWS profile you wish to authenticate with.
 
-Run the script like this:
+ * `aws-mfa-auth --configure`
 
-```
-aws-mfa.py <account_name> <MFA token>
-```
+### Usage
 
-The script will then retrieve the `aws_access_key_id`, `aws_secret_access_key` and `aws_session_token` for your session and set it to the **default** account in the credentials file.
+Provide the token the first time you run the script:
 
-You can now continue to use the aws-cli with the authenticated user.
+ * `aws-mfa-auth --token <MFA_DEVICE_TOKEN>`
 
-## Developer Notes
-
-I am aware that I need to add the following to the script:
-
- * Improved error handling.
- * CLI Help messages.
- * Unit Tests.
-
-If you find this script useful please feel free to contribute to it. I'm open to Pull Requests from anyone.
+Then simply run `aws-mfa-auth` to output the environment variables to setup authentication.
