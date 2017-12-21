@@ -102,8 +102,8 @@ def _set_auth_envs(session):
 
     print(
         'export AWS_ACCESS_KEY_ID={key_id} && '
-        'export AWS_SECRET_ACCESS_KEY={secret} &&'
-        'export AWS_SECURITY_TOKEN={token}'.format(
+        'export AWS_SECRET_ACCESS_KEY={secret} && '
+        'export AWS_SESSION_TOKEN={token}'.format(
             key_id=key_id,
             secret=secret,
             token=token,
