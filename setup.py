@@ -16,12 +16,12 @@ def readme():
 
 setup(
     name='aws-mfa-auth',
-    version='0.0.5',
+    version='0.0.8',
     description='Easy AWS MFA Authentication',
     author='Mark Winterbottom',
     author_email='mark@londonappdeveloper.com',
     scripts=['aws-mfa-auth'],
-    install_requires=['awscli'],
+    install_requires=['awscli', 'pytz'],
     url='https://github.com/londonappdev/aws-mfa-auth',
     long_description=readme(),
     python_requires='>=3',

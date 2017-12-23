@@ -38,6 +38,15 @@ def _args():
     return parser.parse_args()
 
 
+def _ensure_dir_exists(path):
+    """Ensure that the directory at given path exists."""
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
+
 def _update_config(args, conf_path):
     """ Update the config."""
     pass
@@ -79,6 +88,8 @@ def _configure(args):
             args.profile
         )
     ) or args.profile
+
+    _ensure_dir_exists(CONFIG_DIR)
 
     current_mfa_arn = _get_conf(
         CONFIG_FILE, profile, MFA_ARN_OPTION)
