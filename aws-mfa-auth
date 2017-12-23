@@ -8,6 +8,7 @@ import json
 import dateutil.parser
 import datetime
 import pytz
+import errno
 
 
 CONFIG_DIR = os.path.join(os.path.expanduser('~'), '.aws-mfa-auth')
